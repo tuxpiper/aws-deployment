@@ -8,8 +8,7 @@ RUN apk --update add \
     python \
     curl \
     zip && \
-  pip install awscli && \
-  apk --purge del py-pip && \
+  pip install awscli j2cli && \
   rm var/cache/apk/*
 
 COPY scripts/ /usr/bin/
