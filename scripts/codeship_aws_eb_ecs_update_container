@@ -49,4 +49,10 @@ aws elasticbeanstalk create-application-version \
 	--source-bundle "S3Bucket=$S3_BUCKET,S3Key=$VERSION_NAME/Dockerrun.aws.json"
 
 echo "Updating ElasticBeanstalk environment"
-aws elasticbeanstalk update-environment \--environment-name "$ENVIRONMENT_NAME" --version-label "$VERSION_NAME"
+aws elasticbeanstalk update-environment \
+	--environment-name "$ENVIRONMENT_NAME" \
+	--version-label "$VERSION_NAME"
+
+echo "Validating deployment"
+codeship_aws eb_deploy_validation "$APPLICATION_NAME" "$ENVIRONMENT_NAME" "$VERSION_NAME"
+
