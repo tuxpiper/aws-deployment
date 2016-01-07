@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+BASEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+APPLICATION_NAME=${1:?'You need to provide the Elastic Beanstalk application name'}
+ENVIRONMENT_NAME=${2:?'You need to provide the Elastic Beanstalk environment name'}
+S3_BUCKET=${3:?'You need to provide the S3 Bucket to upload the artifact to'}
+CONTAINER_NAME=${4:?'You need to provide the name of the container to update in the ECS setup'}
+VERSION_ID=${5:?'You need to provide the version of the container to deploy'}
+
+j2pipe() {
+	cat > /tmp/j2pipe.$$
+	j2 /tmp/j2pipe.$$
+	rm -f /tmp/j2pipe.$$
+}
+
+ENVIRONMENT_NAME=$(echo $ENVIRONMENT_NAME | j2pipe)
+S3_BUCKET=$(echo $S3_BUCKET | j2pipe)
+CONTAINER_NAME=$(echo $CONTAINER_NAME | j2pipe)
+VERSION_ID=$(echo $VERSION_ID | j2pipe)
+
+##
+
+python $BASEDIR/dockerrun_mgr.py \
+	--app $APPLICATION_NAME \
+	--env $ENVIRONMENT_NAME \
+	--container-name $CONTAINER_NAME \
+	--image-version $VERSION_ID > /tmp/Dockerrun.aws.json
+
+echo "Deploying new Dockerrun.aws.json:"
+echo "-------------------"
+cat /tmp/Dockerrun.aws.json
+echo "-------------------"
+echo
+
+VERSION_NAME=${CI_REPO_NAME}-${VERSION_ID}-`date -u +%Y-%m-%d.%H:%M:%S`
+
+echo "Uploading to S3 for deployment"
+aws s3 cp /tmp/Dockerrun.aws.json "s3://$S3_BUCKET/$VERSION_NAME/Dockerrun.aws.json"
+
+echo "Creating ElasticBeanstalk version: $VERSION_NAME"
+aws elasticbeanstalk create-application-version \
+	--application-name "$APPLICATION_NAME" \
+	--description "${CI_MESSAGE:0:200}" \
+	--version-label "$VERSION_NAME" \
+	--source-bundle "S3Bucket=$S3_BUCKET,S3Key=$VERSION_NAME/Dockerrun.aws.json"
+
+echo "Updating ElasticBeanstalk environment"
+aws elasticbeanstalk update-environment \--environment-name "$ENVIRONMENT_NAME" --version-label "$VERSION_NAME"
